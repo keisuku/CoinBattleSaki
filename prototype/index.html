@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>CoinBattleSaki — 5状態プロトタイプ</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --panel-bg: #16213e;
+    --text: #e0e0e0;
+    --accent: #0f3460;
+    --gold: #ffd700;
+    --red: #ff2222;
+    --green: #22cc88;
+    --blue: #4488ff;
+    --glow-color: transparent;
+    --header-bg: #0f3460;
+    --composite-color: #555;
+    --composite-width: 18%;
+    --ghost-opacity: 0.15;
+    --tp-opacity: 0;
+    --sl-opacity: 0;
+    --entry-flash: 0;
+    --distance-opacity: 0;
+    --distance-text: "あと $366";
+    --distance-top: 25%;
+    --overlay-opacity: 0;
+    --overlay-bg: transparent;
+    --bot-emotion: "calm 😌";
+    --thought-text: "RSIが中立帯...待機中。";
+    --position-opacity: 0;
+    --position-text: "";
+    --tp-progress: 0%;
+    --tp-bar-opacity: 0;
+    --chart-candle-shift: 0px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 390px;
+    height: 100vh;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.5s ease;
+  }
+
+  /* === 画面端グロー === */
+  body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 3px solid var(--glow-color);
+    border-radius: 0;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: inset 0 0 30px var(--glow-color);
+    transition: all 0.5s ease;
+  }
+
+  /* === ヘッダー === */
+  .header {
+    height: 44px;
+    background: var(--header-bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: background 0.5s ease;
+    z-index: 10;
+  }
+  .header .price { font-size: 16px; font-weight: bold; }
+  .header .change { color: var(--green); font-size: 12px; }
+  .header .badge {
+    display: none;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 11px;
+    animation: pulse 0.8s infinite;
+  }
+
+  /* === チャートエリア === */
+  .chart-area {
+    flex: 55;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.5s ease;
+  }
+
+  /* ダミーローソク足 */
+  .candles {
+    position: absolute;
+    bottom: 30%;
+    left: 10%;
+    right: 10%;
+    height: 40%;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    justify-content: center;
+  }
+  .candle {
+    width: 12px;
+    position: relative;
+    transition: transform 0.5s ease;
+  }
+  .candle .body {
+    width: 100%;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+  }
+  .candle .wick {
+    width: 2px;
+    margin: 0 auto;
+    border-radius: 1px;
+    transition: all 0.3s ease;
+  }
+  .candle.green .body { background: var(--green); }
+  .candle.green .wick { background: var(--green); }
+  .candle.red .body { background: var(--red); }
+  .candle.red .wick { background: var(--red); }
+
+  /* ゴーストライン（エントリー予測） */
+  .ghost-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    border-top: 2px dashed var(--gold);
+    opacity: var(--ghost-opacity);
+    transition: opacity 0.5s ease;
+  }
+  .ghost-line.entry { top: 25%; }
+  .ghost-line.entry .label {
+    position: absolute;
+    right: 8px;
+    top: -18px;
+    font-size: 11px;
+    color: var(--gold);
+    white-space: nowrap;
+  }
+
+  /* TP/SLライン */
+  .tp-line, .sl-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    transition: opacity 0.5s ease;
+  }
+  .tp-line {
+    top: 10%;
+    background: var(--gold);
+    opacity: var(--tp-opacity);
+    box-shadow: 0 0 8px var(--gold);
+  }
+  .tp-line .label {
+    position: absolute;
+    right: 8px;
+    top: -18px;
+    font-size: 11px;
+    color: var(--gold);
+    font-weight: bold;
+  }
+  .sl-line {
+    top: 65%;
+    background: var(--red);
+    opacity: var(--sl-opacity);
+    box-shadow: 0 0 8px var(--red);
+  }
+  .sl-line .label {
+    position: absolute;
+    right: 8px;
+    top: 4px;
+    font-size: 11px;
+    color: var(--red);
+    font-weight: bold;
+  }
+
+  /* エントリーライン（確定後） */
+  .entry-line {
+    position: absolute;
+    top: 38%;
+    left: 0; right: 0;
+    height: 1px;
+    border-top: 1px solid #888;
+    opacity: var(--tp-opacity);
+    transition: opacity 0.5s ease;
+  }
+  .entry-line .label {
+    position: absolute;
+    right: 8px;
+    top: -16px;
+    font-size: 10px;
+    color: #aaa;
+  }
+
+  /* 距離ラベル */
+  .distance-label {
+    position: absolute;
+    top: var(--distance-top);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--gold);
+    opacity: var(--distance-opacity);
+    transition: all 0.5s ease;
+    text-shadow: 0 0 10px var(--gold);
+    white-space: nowrap;
+  }
+
+  /* TP/SL間のゾーン塗り */
+  .zone-green, .zone-red {
+    position: absolute;
+    left: 0; right: 0;
+    transition: opacity 0.5s ease;
+  }
+  .zone-green {
+    top: 10%;
+    height: 28%;
+    background: linear-gradient(to bottom, rgba(34,204,136,0.08), rgba(34,204,136,0.02));
+    opacity: var(--tp-opacity);
+  }
+  .zone-red {
+    top: 38%;
+    height: 27%;
+    background: linear-gradient(to top, rgba(255,34,34,0.08), rgba(255,34,34,0.02));
+    opacity: var(--sl-opacity);
+  }
+
+  /* ポジション表示 */
+  .position-box {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: bold;
+    opacity: var(--position-opacity);
+    transition: all 0.5s ease;
+    white-space: nowrap;
+  }
+
+  /* パーティクル風装飾（激アツ/激ヤバ） */
+  .particles {
+    position: absolute;
+    left: 0; right: 0;
+    height: 30px;
+    display: none;
+    justify-content: center;
+    gap: 4px;
+    font-size: 14px;
+    animation: sparkle 1s infinite;
+  }
+  .particles.tp-particles { top: 6%; }
+  .particles.sl-particles { top: 62%; }
+
+  /* === Botパネル === */
+  .bot-panel {
+    flex: 25;
+    background: var(--panel-bg);
+    display: flex;
+    padding: 8px 12px;
+    gap: 12px;
+    border-top: 1px solid #333;
+    transition: all 0.5s ease;
+    flex-shrink: 0;
+    min-height: 120px;
+  }
+
+  .bot-avatar {
+    width: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .bot-avatar .face {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #2a4a3a;
+    border: 2px solid var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    transition: all 0.5s ease;
+  }
+  .bot-avatar .name { font-size: 11px; font-weight: bold; color: var(--green); }
+  .bot-avatar .emotion { font-size: 10px; color: #888; }
+
+  .bot-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bot-info .thought {
+    font-size: 12px;
+    color: #ccc;
+    font-style: italic;
+    min-height: 32px;
+    line-height: 1.4;
+  }
+
+  /* インジケーターバー */
+  .indicators {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10px;
+  }
+  .indicator-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .indicator-row .label { width: 36px; color: #888; }
+  .indicator-row .bar {
+    flex: 1;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .indicator-row .bar .fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease, background 0.5s ease;
+  }
+  .indicator-row .value { width: 24px; text-align: right; color: #aaa; font-size: 9px; }
+
+  /* コンポジットスコア */
+  .composite {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .composite .icon { font-size: 12px; }
+  .composite .bar {
+    flex: 1;
+    height: 10px;
+    background: #222;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid #444;
+  }
+  .composite .bar .fill {
+    height: 100%;
+    width: var(--composite-width);
+    background: var(--composite-color);
+    border-radius: 4px;
+    transition: all 0.5s ease;
+  }
+  .composite .pct { font-size: 11px; font-weight: bold; min-width: 32px; }
+
+  /* TP進捗バー（ポジション保持中） */
+  .tp-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: var(--tp-bar-opacity);
+    transition: opacity 0.5s ease;
+  }
+  .tp-progress .label { font-size: 10px; color: var(--gold); width: 50px; }
+  .tp-progress .bar {
+    flex: 1;
+    height: 8px;
+    background: #222;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #555;
+  }
+  .tp-progress .bar .fill {
+    height: 100%;
+    width: var(--tp-progress);
+    background: linear-gradient(90deg, var(--green), var(--gold));
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  /* === Bot切替バー === */
+  .bot-switcher {
+    height: 50px;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  .bot-switcher button {
+    background: #222;
+    border: 1px solid #444;
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .bot-switcher button.active {
+    background: var(--accent);
+    border-color: var(--green);
+  }
+  .bot-switcher button:hover { background: #333; }
+
+  /* === 状態切替ボタン（デバッグ用） === */
+  .debug-bar {
+    height: 50px;
+    background: #0a0a15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    border-top: 1px solid #333;
+  }
+  .debug-bar button {
+    background: #1a1a2e;
+    border: 1px solid #555;
+    color: #aaa;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .debug-bar button:hover { background: #333; color: #fff; }
+  .debug-bar button.active { background: var(--accent); color: #fff; border-color: var(--blue); }
+
+  /* === オーバーレイ（勝利/敗北） === */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: var(--overlay-opacity);
+    background: var(--overlay-bg);
+    z-index: 50;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+  .overlay .result-icon { font-size: 48px; margin-bottom: 12px; }
+  .overlay .result-title { font-size: 28px; font-weight: bold; margin-bottom: 8px; }
+  .overlay .result-name { font-size: 18px; margin-bottom: 16px; }
+  .overlay .result-pnl { font-size: 32px; font-weight: bold; }
+
+  /* === アニメーション === */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes sparkle {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 0.3; }
+  }
+  @keyframes flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+  }
+
+  /* === 状態別スタイル === */
+
+  /* State 2: 予兆 */
+  body[data-state="omen"] {
+    --ghost-opacity: 0.6;
+    --composite-color: #4488ff;
+    --composite-width: 52%;
+    --distance-opacity: 0.8;
+    --distance-top: 22%;
+    --bot-emotion: "alert ⚡";
+    --thought-text: "RSIが売られ過ぎに接近中！MACD反転の兆しも...";
+  }
+
+  /* State 3: アクション */
+  body[data-state="action"] {
+    --ghost-opacity: 0;
+    --tp-opacity: 1;
+    --sl-opacity: 1;
+    --composite-color: var(--gold);
+    --composite-width: 100%;
+    --entry-flash: 1;
+    --header-bg: #2a1a00;
+    --position-opacity: 1;
+    --bot-emotion: "ATTACK! ⚔️";
+    --thought-text: "";
+  }
+
+  /* State 4A: 激アツ */
+  body[data-state="hot"] {
+    --tp-opacity: 1;
+    --sl-opacity: 0.3;
+    --glow-color: rgba(255, 215, 0, 0.4);
+    --header-bg: #3a2a00;
+    --distance-opacity: 1;
+    --distance-top: 7%;
+    --distance-text: "あと $120!!";
+    --position-opacity: 1;
+    --composite-color: var(--gold);
+    --composite-width: 100%;
+    --tp-bar-opacity: 1;
+    --tp-progress: 83%;
+    --bot-emotion: "EXCITED 🔥";
+    --thought-text: "あと$120で利確！届くか!?";
+  }
+
+  /* State 4B: 激ヤバ */
+  body[data-state="danger"] {
+    --tp-opacity: 0.3;
+    --sl-opacity: 1;
+    --glow-color: rgba(255, 34, 34, 0.4);
+    --header-bg: #3a0a0a;
+    --distance-opacity: 1;
+    --distance-top: 62%;
+    --distance-text: "あと $80!!";
+    --position-opacity: 1;
+    --composite-color: var(--gold);
+    --composite-width: 100%;
+    --tp-bar-opacity: 1;
+    --tp-progress: 12%;
+    --bot-emotion: "DANGER ☠️";
+    --thought-text: "SLまであと$80...耐えろ...!!";
+  }
+
+  /* State 5A: 勝利 */
+  body[data-state="win"] {
+    --overlay-opacity: 1;
+    --overlay-bg: rgba(20, 15, 0, 0.92);
+    --tp-opacity: 1;
+    --sl-opacity: 1;
+    --position-opacity: 1;
+  }
+
+  /* State 5B: 敗北 */
+  body[data-state="lose"] {
+    --overlay-opacity: 1;
+    --overlay-bg: rgba(30, 5, 5, 0.92);
+    --tp-opacity: 1;
+    --sl-opacity: 1;
+    --position-opacity: 1;
+  }
+
+  /* 激アツ時のヘッダーバッジ */
+  body[data-state="hot"] .header .badge {
+    display: inline-block;
+    background: var(--gold);
+    color: #000;
+  }
+  body[data-state="danger"] .header .badge {
+    display: inline-block;
+    background: var(--red);
+    color: #fff;
+  }
+
+  /* 激アツ/激ヤバパーティクル */
+  body[data-state="hot"] .tp-particles { display: flex; }
+  body[data-state="danger"] .sl-particles { display: flex; }
+
+  /* 激ヤバ時の距離ラベルは赤 */
+  body[data-state="danger"] .distance-label {
+    color: var(--red);
+    text-shadow: 0 0 10px var(--red);
+  }
+
+  /* アクション時のシェイク */
+  body[data-state="action"] .chart-area {
+    animation: shake 0.3s ease 2;
+  }
+</style>
+</head>
+<body data-state="idle">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <div>
+      <span class="price">BTC/USDT $97,432.50</span>
+      <span class="change"> ▲+0.8%</span>
+    </div>
+    <span class="badge">✦ 激アツ ✦</span>
+    <span>[15m] ⚙</span>
+  </div>
+
+  <!-- チャートエリア -->
+  <div class="chart-area">
+    <!-- TP/SL ゾーン塗り -->
+    <div class="zone-green"></div>
+    <div class="zone-red"></div>
+
+    <!-- TPライン -->
+    <div class="tp-line">
+      <span class="label">$98,500 ✦ TP +0.71%</span>
+    </div>
+
+    <!-- ゴーストライン（エントリー予測） -->
+    <div class="ghost-line entry">
+      <span class="label">$97,800 ⚔ SARAH Entry</span>
+    </div>
+
+    <!-- エントリーライン（確定後） -->
+    <div class="entry-line">
+      <span class="label">$97,810 ⚔ Entry</span>
+    </div>
+
+    <!-- SLライン -->
+    <div class="sl-line">
+      <span class="label">$97,200 ☠ SL -0.62%</span>
+    </div>
+
+    <!-- ダミーローソク足 -->
+    <div class="candles">
+      <div class="candle green"><div class="wick" style="height:18px"></div><div class="body" style="height:30px"></div></div>
+      <div class="candle red"><div class="wick" style="height:12px"></div><div class="body" style="height:22px"></div></div>
+      <div class="candle green"><div class="wick" style="height:20px"></div><div class="body" style="height:35px"></div></div>
+      <div class="candle green"><div class="wick" style="height:10px"></div><div class="body" style="height:28px"></div></div>
+      <div class="candle red"><div class="wick" style="height:15px"></div><div class="body" style="height:18px"></div></div>
+      <div class="candle green"><div class="wick" style="height:22px"></div><div class="body" style="height:40px"></div></div>
+      <div class="candle green"><div class="wick" style="height:8px"></div><div class="body" style="height:32px"></div></div>
+      <div class="candle red"><div class="wick" style="height:14px"></div><div class="body" style="height:20px"></div></div>
+      <div class="candle green"><div class="wick" style="height:18px"></div><div class="body" style="height:45px"></div></div>
+      <div class="candle green"><div class="wick" style="height:6px"></div><div class="body" style="height:38px"></div></div>
+    </div>
+
+    <!-- パーティクル風装飾 -->
+    <div class="particles tp-particles">✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦</div>
+    <div class="particles sl-particles">☠ ☠ ☠ ☠ ☠ ☠ ☠ ☠ ☠ ☠ ☠</div>
+
+    <!-- 距離ラベル -->
+    <div class="distance-label"></div>
+
+    <!-- ポジション表示 -->
+    <div class="position-box"></div>
+  </div>
+
+  <!-- Botパネル -->
+  <div class="bot-panel">
+    <div class="bot-avatar">
+      <div class="face" id="bot-face">🟢</div>
+      <div class="name">SARAH 🟢</div>
+      <div class="emotion" id="bot-emotion">calm 😌</div>
+    </div>
+    <div class="bot-info">
+      <div class="thought" id="bot-thought">RSIが中立帯...待機中。</div>
+      <div class="indicators" id="indicators">
+        <div class="indicator-row">
+          <span class="label">RSI</span>
+          <div class="bar"><div class="fill" id="rsi-fill" style="width:48%;background:#4488ff"></div></div>
+          <span class="value">48</span>
+        </div>
+        <div class="indicator-row">
+          <span class="label">MACD</span>
+          <div class="bar"><div class="fill" id="macd-fill" style="width:35%;background:#4488ff"></div></div>
+          <span class="value">-3</span>
+        </div>
+        <div class="indicator-row">
+          <span class="label">Vol</span>
+          <div class="bar"><div class="fill" id="vol-fill" style="width:20%;background:#666"></div></div>
+          <span class="value">低</span>
+        </div>
+      </div>
+      <div class="composite">
+        <span class="icon">◎</span>
+        <div class="bar"><div class="fill"></div></div>
+        <span class="pct" id="composite-pct">18%</span>
+      </div>
+      <div class="tp-progress">
+        <span class="label">TP進捗</span>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bot切替バー -->
+  <div class="bot-switcher">
+    <button>ノーポジ</button>
+    <button class="active">SARAH🟢</button>
+    <button>EMMA🔴</button>
+    <button>ALEX🟡</button>
+  </div>
+
+  <!-- オーバーレイ -->
+  <div class="overlay" id="overlay">
+    <div class="result-icon" id="result-icon"></div>
+    <div class="result-title" id="result-title"></div>
+    <div class="result-name" id="result-name"></div>
+    <div class="result-pnl" id="result-pnl"></div>
+  </div>
+
+  <!-- 状態切替ボタン（デバッグ用） -->
+  <div class="debug-bar">
+    <button onclick="setState('idle')" class="active" id="btn-idle">待機</button>
+    <button onclick="setState('omen')" id="btn-omen">予兆</button>
+    <button onclick="setState('action')" id="btn-action">Entry</button>
+    <button onclick="setState('hot')" id="btn-hot">激アツ</button>
+    <button onclick="setState('danger')" id="btn-danger">激ヤバ</button>
+    <button onclick="setState('win')" id="btn-win">勝利</button>
+    <button onclick="setState('lose')" id="btn-lose">敗北</button>
+  </div>
+
+<script>
+const stateConfig = {
+  idle: {
+    emotion: 'calm 😌',
+    thought: 'RSIが中立帯...待機中。',
+    compositePct: '18%',
+    rsi: { w: '48%', c: '#4488ff', v: '48' },
+    macd: { w: '35%', c: '#4488ff', v: '-3' },
+    vol: { w: '20%', c: '#666', v: '低' },
+    distance: '',
+    position: '',
+    price: '$97,432.50',
+    change: '▲+0.1%',
+    changeColor: '#22cc88',
+    showIndicators: true,
+  },
+  omen: {
+    emotion: 'alert ⚡',
+    thought: 'RSIが売られ過ぎに接近中！\nMACD反転の兆しも...',
+    compositePct: '52%',
+    rsi: { w: '72%', c: '#ffaa00', v: '34⚡' },
+    macd: { w: '55%', c: '#4488ff', v: '-8' },
+    vol: { w: '45%', c: '#4488ff', v: '中↑' },
+    distance: 'あと $366',
+    position: '',
+    price: '$97,432.50',
+    change: '▲+0.4%',
+    changeColor: '#22cc88',
+    showIndicators: true,
+  },
+  action: {
+    emotion: 'ATTACK! ⚔️',
+    thought: '',
+    compositePct: '100%',
+    rsi: { w: '100%', c: '#ffd700', v: '' },
+    macd: { w: '100%', c: '#ffd700', v: '' },
+    vol: { w: '100%', c: '#ffd700', v: '' },
+    distance: '',
+    position: 'LONG +$0 (0.00%) ⚔',
+    price: '$97,810.00',
+    change: '▲+0.8%',
+    changeColor: '#22cc88',
+    showIndicators: false,
+    actionInfo: 'LONG ENTRY!\n$97,810 / Lev: 5x\nTP: $98,500 (+0.71%)\nSL: $97,200 (-0.62%)',
+  },
+  hot: {
+    emotion: 'EXCITED 🔥',
+    thought: 'あと$120で利確！届くか!? ✦✦',
+    compositePct: '100%',
+    rsi: { w: '100%', c: '#ffd700', v: '' },
+    macd: { w: '100%', c: '#ffd700', v: '' },
+    vol: { w: '100%', c: '#ffd700', v: '' },
+    distance: 'あと $120!!',
+    position: 'LONG +$570 (+0.58%) ▲▲▲',
+    price: '$98,380.00',
+    change: '▲+1.5%',
+    changeColor: '#ffd700',
+    showIndicators: false,
+  },
+  danger: {
+    emotion: 'DANGER ☠️',
+    thought: 'SLまであと$80...耐えろ...!!',
+    compositePct: '100%',
+    rsi: { w: '100%', c: '#ff2222', v: '' },
+    macd: { w: '100%', c: '#ff2222', v: '' },
+    vol: { w: '100%', c: '#ff2222', v: '' },
+    distance: 'あと $80!!',
+    position: 'LONG -$530 (-0.54%) ▼▼▼',
+    price: '$97,280.00',
+    change: '▼-0.2%',
+    changeColor: '#ff2222',
+    showIndicators: false,
+  },
+  win: {
+    emotion: 'VICTORY! 🎉',
+    thought: '',
+    compositePct: '100%',
+    distance: '',
+    position: 'LONG +$690 (+0.71%)',
+    price: '$98,500.00',
+    change: '▲+1.8%',
+    changeColor: '#ffd700',
+    showIndicators: false,
+    overlay: { icon: '✦', title: '勝 利', name: 'SARAH 🟢 WINS!', pnl: '+$690 (+0.71%)', pnlColor: '#ffd700' },
+  },
+  lose: {
+    emotion: 'DEFEATED 😞',
+    thought: '',
+    compositePct: '100%',
+    distance: '',
+    position: 'LONG -$610 (-0.62%)',
+    price: '$97,200.00',
+    change: '▼-0.5%',
+    changeColor: '#ff2222',
+    showIndicators: false,
+    overlay: { icon: '☠', title: '敗 北', name: 'SARAH 🟢 STOPPED', pnl: '-$610 (-0.62%)', pnlColor: '#ff2222' },
+  },
+};
+
+function setState(state) {
+  document.body.setAttribute('data-state', state);
+  const cfg = stateConfig[state];
+
+  // ボタンのアクティブ状態
+  document.querySelectorAll('.debug-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + state).classList.add('active');
+
+  // Bot感情
+  document.getElementById('bot-emotion').textContent = cfg.emotion;
+  document.getElementById('bot-thought').textContent = cfg.actionInfo || cfg.thought;
+  document.getElementById('composite-pct').textContent = cfg.compositePct;
+
+  // インジケーター
+  const indEl = document.getElementById('indicators');
+  if (cfg.showIndicators) {
+    indEl.style.display = '';
+    if (cfg.rsi) {
+      document.getElementById('rsi-fill').style.width = cfg.rsi.w;
+      document.getElementById('rsi-fill').style.background = cfg.rsi.c;
+      document.getElementById('rsi-fill').parentElement.nextElementSibling.textContent = cfg.rsi.v;
+      document.getElementById('macd-fill').style.width = cfg.macd.w;
+      document.getElementById('macd-fill').style.background = cfg.macd.c;
+      document.getElementById('macd-fill').parentElement.nextElementSibling.textContent = cfg.macd.v;
+      document.getElementById('vol-fill').style.width = cfg.vol.w;
+      document.getElementById('vol-fill').style.background = cfg.vol.c;
+      document.getElementById('vol-fill').parentElement.nextElementSibling.textContent = cfg.vol.v;
+    }
+  } else {
+    indEl.style.display = 'none';
+  }
+
+  // 距離ラベル
+  document.querySelector('.distance-label').textContent = cfg.distance;
+
+  // ポジション表示
+  const posBox = document.querySelector('.position-box');
+  posBox.textContent = cfg.position;
+  if (state === 'danger' || state === 'lose') {
+    posBox.style.color = '#ff2222';
+    posBox.style.borderColor = '#ff2222';
+  } else if (state === 'hot' || state === 'win') {
+    posBox.style.color = '#ffd700';
+    posBox.style.borderColor = '#ffd700';
+  } else {
+    posBox.style.color = '#e0e0e0';
+    posBox.style.borderColor = '#444';
+  }
+
+  // ヘッダー価格
+  document.querySelector('.price').textContent = 'BTC/USDT ' + cfg.price;
+  const changeEl = document.querySelector('.change');
+  changeEl.textContent = ' ' + cfg.change;
+  changeEl.style.color = cfg.changeColor;
+
+  // 激ヤバ時バッジ変更
+  const badge = document.querySelector('.badge');
+  if (state === 'danger') {
+    badge.textContent = '☠ 激ヤバ ☠';
+  } else {
+    badge.textContent = '✦ 激アツ ✦';
+  }
+
+  // オーバーレイ
+  if (cfg.overlay) {
+    document.getElementById('result-icon').textContent = cfg.overlay.icon;
+    document.getElementById('result-title').textContent = cfg.overlay.title;
+    document.getElementById('result-title').style.color = cfg.overlay.pnlColor;
+    document.getElementById('result-name').textContent = cfg.overlay.name;
+    document.getElementById('result-pnl').textContent = cfg.overlay.pnl;
+    document.getElementById('result-pnl').style.color = cfg.overlay.pnlColor;
+  }
+}
+
+// 初期状態
+setState('idle');
+</script>
+</body>
+</html>
