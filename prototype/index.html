@@ -199,6 +199,33 @@
     background: linear-gradient(to top, rgba(255,34,68,0.06), transparent);
   }
 
+  /* Beast overlay in chart (尾獣メカニクス) */
+  .beast-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .beast-overlay img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    mask-image: radial-gradient(ellipse 80% 80% at center, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 80% at center, black 30%, transparent 70%);
+  }
+  .beast-overlay.phase-idle { opacity: 0; }
+  .beast-overlay.phase-battle { opacity: 0.15; }
+  .beast-overlay.phase-hot { opacity: 0.3; filter: saturate(1.5); }
+  .beast-overlay.phase-awaken { opacity: 0.5; filter: saturate(2) brightness(1.3); }
+  .beast-overlay.phase-fizzle { opacity: 0.08; filter: grayscale(0.8); }
+
   /* Distance label */
   .distance {
     position: absolute;
@@ -419,12 +446,15 @@
     background: #080818;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 4px;
     padding: 0 8px;
     flex-shrink: 0;
     border-top: 1px solid #1a1a3a;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .bot-switcher::-webkit-scrollbar { display: none; }
   .bot-switcher button {
     background: #111128;
     border: 1.5px solid #2a2a4a;
@@ -563,6 +593,11 @@
     <!-- Candles -->
     <div class="candles" id="candles"></div>
 
+    <!-- Beast overlay (尾獣メカニクス — chart背景に神獣表示) -->
+    <div class="beast-overlay" id="beast-overlay">
+      <img id="beast-img" src="" />
+    </div>
+
     <!-- Particles -->
     <div class="particles-container" id="particles"></div>
 
@@ -617,12 +652,17 @@
     </div>
   </div>
 
-  <!-- Bot Switcher -->
+  <!-- Bot Switcher (scrollable) -->
   <div class="bot-switcher" id="bot-switcher">
     <button onclick="switchBot('none')">ノーポジ</button>
     <button onclick="switchBot('sarah')" class="active" data-bot="sarah">SARAH🟢</button>
     <button onclick="switchBot('emma')" data-bot="emma">EMMA🔴</button>
     <button onclick="switchBot('john')" data-bot="john">JOHN🔵</button>
+    <button onclick="switchBot('mike')" data-bot="mike">MIKE🟣</button>
+    <button onclick="switchBot('alex')" data-bot="alex">ALEX🟡</button>
+    <button onclick="switchBot('yuki')" data-bot="yuki">YUKI⚪</button>
+    <button onclick="switchBot('delta')" data-bot="delta">DELTA🔶</button>
+    <button onclick="switchBot('atr')" data-bot="atr">ATR🔷</button>
   </div>
 
   <!-- Overlay -->
@@ -653,21 +693,81 @@
 
 <script>
 // ==============================
-// Bot Data
+// Bot Data — 尾獣メカニクス5段階画像対応
 // ==============================
+// 画像ファイル名規則: assets/images/{id}_{phase}.png
+// phase: idle(S1-S2), battle(S3-S4), hot(S5), awaken(S6-S7), fizzle(S8)
 const bots = {
   sarah: {
     name: 'SARAH 🟢', color: '#22cc88', glow: 'rgba(34,204,136,0.3)',
-    img: 'assets/images/sarah.png', fallback: '🟢', beast: '鳳凰',
+    fallback: '🟢', beast: '鳳凰',
+    images: {
+      idle:   'assets/images/sarah_idle.png',
+      battle: 'assets/images/sarah_battle.png',
+      hot:    'assets/images/sarah_hot.png',
+      awaken: 'assets/images/sarah_awaken.png',
+      fizzle: 'assets/images/sarah_fizzle.png',
+      base:   'assets/images/sarah.png',  // fallback single image
+    },
   },
   emma: {
     name: 'EMMA 🔴', color: '#ff2244', glow: 'rgba(255,34,68,0.3)',
-    img: 'assets/images/emma.png', fallback: '🔴', beast: '狂牛',
+    fallback: '🔴', beast: '狂牛',
+    images: {
+      idle:   'assets/images/emma_idle.png',
+      battle: 'assets/images/emma_battle.png',
+      hot:    'assets/images/emma_hot.png',
+      awaken: 'assets/images/emma_awaken.png',
+      fizzle: 'assets/images/emma_fizzle.png',
+      base:   'assets/images/emma.png',
+    },
   },
   john: {
     name: 'JOHN 🔵', color: '#4488ff', glow: 'rgba(68,136,255,0.3)',
-    img: 'assets/images/john.png', fallback: '🔵', beast: '隼',
+    fallback: '🔵', beast: '隼',
+    images: {
+      idle:   'assets/images/john_idle.png',
+      battle: 'assets/images/john_battle.png',
+      hot:    'assets/images/john_hot.png',
+      awaken: 'assets/images/john_awaken.png',
+      fizzle: 'assets/images/john_fizzle.png',
+      base:   'assets/images/john.png',
+    },
   },
+  mike: {
+    name: 'MIKE 🟣', color: '#9944ff', glow: 'rgba(153,68,255,0.3)',
+    fallback: '🟣', beast: '雷狐',
+    images: { base: 'assets/images/mike.png' },
+  },
+  alex: {
+    name: 'ALEX 🟡', color: '#ddaa00', glow: 'rgba(221,170,0,0.3)',
+    fallback: '🟡', beast: '白虎',
+    images: { base: 'assets/images/alex.png' },
+  },
+  yuki: {
+    name: 'YUKI ⚪', color: '#aaaacc', glow: 'rgba(170,170,204,0.3)',
+    fallback: '⚪', beast: '玄武',
+    images: { base: 'assets/images/yuki.png' },
+  },
+  delta: {
+    name: 'DELTA 🔶', color: '#dd8800', glow: 'rgba(221,136,0,0.3)',
+    fallback: '🔶', beast: '絡新婦',
+    images: { base: 'assets/images/delta.png' },
+  },
+  atr: {
+    name: 'ATR 🔷', color: '#4466dd', glow: 'rgba(68,102,221,0.3)',
+    fallback: '🔷', beast: '天龍',
+    images: { base: 'assets/images/atr.png' },
+  },
+};
+
+// Map game state → image phase
+const stateToPhase = {
+  idle: 'idle', omen: 'idle',
+  rising: 'battle', clash: 'battle',
+  hot: 'hot',
+  awaken: 'awaken', critical: 'awaken',
+  fizzle: 'fizzle',
 };
 
 let activeBot = 'sarah';
@@ -781,6 +881,49 @@ const states = {
 };
 
 // ==============================
+// Get best available image for bot + state
+// ==============================
+function getBotImage(botId, gameState) {
+  const bot = bots[botId];
+  if (!bot) return '';
+  const phase = stateToPhase[gameState] || 'idle';
+  const imgs = bot.images;
+  // Try phase-specific, then base, then empty
+  return imgs[phase] || imgs.base || '';
+}
+
+// ==============================
+// Update bot avatar image with fallback chain
+// ==============================
+function updateBotAvatar(botId, gameState) {
+  const imgEl = document.getElementById('bot-img');
+  const fbEl = document.getElementById('bot-fallback');
+  const bot = bots[botId];
+  if (!bot) return;
+
+  const src = getBotImage(botId, gameState);
+  if (src) {
+    imgEl.src = src;
+    imgEl.style.display = '';
+    fbEl.style.display = 'none';
+    // If phase image fails, try base; if base fails, show fallback
+    imgEl.onerror = function() {
+      const baseSrc = bot.images.base || '';
+      if (this.src.indexOf(baseSrc) === -1 && baseSrc) {
+        this.src = baseSrc;
+      } else {
+        this.style.display = 'none';
+        fbEl.style.display = 'flex';
+      }
+    };
+  } else {
+    imgEl.style.display = 'none';
+    fbEl.style.display = 'flex';
+  }
+  fbEl.textContent = bot.fallback;
+}
+
+// ==============================
 // Switch Bot
 // ==============================
 function switchBot(id) {
@@ -804,9 +947,7 @@ function switchBot(id) {
   document.documentElement.style.setProperty('--bot-color', bot.color);
   document.documentElement.style.setProperty('--bot-glow', bot.glow);
   document.getElementById('bot-name').textContent = bot.name;
-  document.getElementById('bot-img').src = bot.img;
-  document.getElementById('bot-img').style.display = '';
-  document.getElementById('bot-fallback').textContent = bot.fallback;
+  updateBotAvatar(id, currentState);
   // Re-apply current state
   setState(currentState);
 }
@@ -839,6 +980,24 @@ function setState(state) {
   currentState = state;
   const s = states[state];
   const bot = bots[activeBot];
+
+  // Update bot avatar for current state (尾獣メカニクス)
+  updateBotAvatar(activeBot, state);
+
+  // Update beast overlay in chart area
+  const beastOv = document.getElementById('beast-overlay');
+  const beastImg = document.getElementById('beast-img');
+  const phase = stateToPhase[state] || 'idle';
+  beastOv.className = 'beast-overlay phase-' + phase;
+  const beastSrc = getBotImage(activeBot, state);
+  if (beastSrc && phase !== 'idle') {
+    beastImg.src = beastSrc;
+    beastImg.onerror = function() {
+      const base = bot.images.base;
+      if (base && this.src.indexOf(base) === -1) this.src = base;
+      else beastOv.style.opacity = '0';
+    };
+  }
 
   // Debug buttons
   document.querySelectorAll('.debug-bar button').forEach(b => b.classList.remove('active'));
@@ -986,7 +1145,11 @@ function setState(state) {
     document.getElementById('res-pnl').textContent = s.overlay.pnl;
     document.getElementById('res-pnl').style.color = s.overlay.pnlColor;
     document.getElementById('overlay-bg').style.background = s.overlay.bg;
-    document.getElementById('res-img').src = bot.img;
+    document.getElementById('res-img').src = getBotImage(activeBot, state);
+    document.getElementById('res-img').onerror = function() {
+      const base = bot.images.base;
+      if (base && this.src.indexOf(base) === -1) this.src = base;
+    };
     ovEl.style.opacity = '1';
   } else {
     ovEl.style.opacity = '0';
