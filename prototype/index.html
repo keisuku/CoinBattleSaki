@@ -111,37 +111,42 @@
     background-size: 40px 40px;
   }
 
-  /* Candlesticks */
-  .candles {
+  /* Candlestick Canvas */
+  #chart-canvas {
     position: absolute;
-    bottom: 25%;
-    left: 5%;
-    right: 5%;
-    height: 50%;
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    justify-content: flex-end;
-  }
-  .candle {
-    width: 10px;
-    position: relative;
-    opacity: 0.9;
-  }
-  .candle .wick {
-    width: 1.5px;
-    margin: 0 auto;
-    border-radius: 1px;
-  }
-  .candle .body {
+    inset: 0;
     width: 100%;
-    border-radius: 1.5px;
-    min-height: 2px;
+    height: 100%;
   }
-  .candle.g .body { background: var(--green); }
-  .candle.g .wick { background: var(--green); }
-  .candle.r .body { background: var(--red); }
-  .candle.r .wick { background: var(--red); }
+
+  /* σ indicator */
+  .sigma-display {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-size: 11px;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+    z-index: 5;
+  }
+  .sigma-display .sigma-val {
+    font-size: 18px;
+    font-weight: bold;
+    margin-left: 4px;
+  }
+  .sigma-display .sigma-bar {
+    width: 120px;
+    height: 4px;
+    background: #1a1a2e;
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .sigma-display .sigma-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background 0.5s ease;
+  }
 
   /* TP/SL Lines */
   .chart-line {
@@ -419,12 +424,15 @@
     background: #080818;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 4px;
     padding: 0 8px;
     flex-shrink: 0;
     border-top: 1px solid #1a1a3a;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .bot-switcher::-webkit-scrollbar { display: none; }
   .bot-switcher button {
     background: #111128;
     border: 1.5px solid #2a2a4a;
@@ -560,8 +568,14 @@
     <div class="chart-line entry-line" id="entry-line"><span>Entry $97,810</span></div>
     <div class="chart-line sl-line" id="sl-line"><span>SL $97,200 -0.62%</span></div>
 
-    <!-- Candles -->
-    <div class="candles" id="candles"></div>
+    <!-- Canvas Chart -->
+    <canvas id="chart-canvas"></canvas>
+
+    <!-- σ Display -->
+    <div class="sigma-display">
+      <span>σ</span><span class="sigma-val" id="sigma-val">0.00</span>
+      <div class="sigma-bar"><div class="sigma-bar-fill" id="sigma-fill" style="width:0%;background:#444"></div></div>
+    </div>
 
     <!-- Particles -->
     <div class="particles-container" id="particles"></div>
@@ -620,9 +634,14 @@
   <!-- Bot Switcher -->
   <div class="bot-switcher" id="bot-switcher">
     <button onclick="switchBot('none')">ノーポジ</button>
+    <button onclick="switchBot('john')" data-bot="john">JOHN🔵</button>
+    <button onclick="switchBot('mike')" data-bot="mike">MIKE🟣</button>
     <button onclick="switchBot('sarah')" class="active" data-bot="sarah">SARAH🟢</button>
     <button onclick="switchBot('emma')" data-bot="emma">EMMA🔴</button>
-    <button onclick="switchBot('john')" data-bot="john">JOHN🔵</button>
+    <button onclick="switchBot('alex')" data-bot="alex">ALEX🟡</button>
+    <button onclick="switchBot('yuki')" data-bot="yuki">YUKI⚪</button>
+    <button onclick="switchBot('delta')" data-bot="delta">DELTA🔶</button>
+    <button onclick="switchBot('atr')" data-bot="atr">ATR🔷</button>
   </div>
 
   <!-- Overlay -->
@@ -653,46 +672,262 @@
 
 <script>
 // ==============================
-// Bot Data
+// Bot Data (all 8 bots)
 // ==============================
 const bots = {
-  sarah: {
-    name: 'SARAH 🟢', color: '#22cc88', glow: 'rgba(34,204,136,0.3)',
-    img: 'assets/images/sarah.png', fallback: '🟢', beast: '鳳凰',
-  },
-  emma: {
-    name: 'EMMA 🔴', color: '#ff2244', glow: 'rgba(255,34,68,0.3)',
-    img: 'assets/images/emma.png', fallback: '🔴', beast: '狂牛',
-  },
-  john: {
-    name: 'JOHN 🔵', color: '#4488ff', glow: 'rgba(68,136,255,0.3)',
-    img: 'assets/images/john.png', fallback: '🔵', beast: '隼',
-  },
+  john:  { name: 'JOHN 🔵',  color: '#4488ff', glow: 'rgba(68,136,255,0.3)',  img: 'assets/images/john.png',  fallback: '🔵', beast: '隼',     tf: '5m'  },
+  mike:  { name: 'MIKE 🟣',  color: '#9944ff', glow: 'rgba(153,68,255,0.3)',  img: 'assets/images/mike.png',  fallback: '🟣', beast: '雷狐',   tf: '5m'  },
+  sarah: { name: 'SARAH 🟢', color: '#22cc88', glow: 'rgba(34,204,136,0.3)',  img: 'assets/images/sarah.png', fallback: '🟢', beast: '鳳凰',   tf: '15m' },
+  emma:  { name: 'EMMA 🔴',  color: '#ff2244', glow: 'rgba(255,34,68,0.3)',   img: 'assets/images/emma.png',  fallback: '🔴', beast: '狂牛',   tf: '15m' },
+  alex:  { name: 'ALEX 🟡',  color: '#ffcc00', glow: 'rgba(255,204,0,0.3)',   img: 'assets/images/alex.png',  fallback: '🟡', beast: '白虎',   tf: '1h'  },
+  yuki:  { name: 'YUKI ⚪',  color: '#cccccc', glow: 'rgba(204,204,204,0.3)', img: 'assets/images/yuki.png',  fallback: '⚪', beast: '玄武',   tf: '1h'  },
+  delta: { name: 'DELTA 🔶', color: '#ff8800', glow: 'rgba(255,136,0,0.3)',   img: 'assets/images/delta.png', fallback: '🔶', beast: '絡新婦', tf: '15m' },
+  atr:   { name: 'ATR 🔷',   color: '#0088ff', glow: 'rgba(0,136,255,0.3)',   img: 'assets/images/atr.png',   fallback: '🔷', beast: '天龍',   tf: '1h'  },
 };
 
 let activeBot = 'sarah';
 let currentState = 'idle';
 
 // ==============================
-// Generate Candles
+// Binance API + Canvas Chart
 // ==============================
-function genCandles() {
-  const el = document.getElementById('candles');
-  el.innerHTML = '';
-  const data = [
-    {t:'g',w:18,b:30},{t:'r',w:12,b:22},{t:'g',w:20,b:35},{t:'g',w:10,b:28},
-    {t:'r',w:15,b:18},{t:'g',w:22,b:40},{t:'g',w:8,b:32},{t:'r',w:14,b:20},
-    {t:'g',w:18,b:45},{t:'g',w:6,b:38},{t:'r',w:10,b:15},{t:'g',w:16,b:42},
-    {t:'g',w:12,b:36},{t:'r',w:8,b:12},{t:'g',w:20,b:48},
-  ];
-  data.forEach(d => {
-    const c = document.createElement('div');
-    c.className = 'candle ' + d.t;
-    c.innerHTML = `<div class="wick" style="height:${d.w}px"></div><div class="body" style="height:${d.b}px"></div>`;
-    el.appendChild(c);
-  });
+let klineData = [];    // [{open, high, low, close, time}, ...]
+let currentPrice = 0;
+let currentSigma = 0;
+
+const CANDLE_COLORS = { up: '#22cc88', down: '#ff2244' };
+const CHART_PADDING = { top: 40, bottom: 30, left: 10, right: 60 };
+
+// Fetch kline data from Binance
+async function fetchKlines() {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=60');
+    const raw = await res.json();
+    klineData = raw.map(k => ({
+      time: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5],
+    }));
+    if (klineData.length > 0) {
+      currentPrice = klineData[klineData.length - 1].close;
+      updatePriceDisplay();
+      calcSigma();
+      drawChart();
+    }
+  } catch (e) {
+    console.warn('Binance API fetch failed, using fallback data:', e);
+    generateFallbackData();
+  }
 }
-genCandles();
+
+// Fallback if Binance API is unreachable
+function generateFallbackData() {
+  const base = 97000 + Math.random() * 3000;
+  klineData = [];
+  let price = base;
+  for (let i = 0; i < 60; i++) {
+    const change = (Math.random() - 0.48) * 200;
+    const open = price;
+    const close = price + change;
+    const high = Math.max(open, close) + Math.random() * 100;
+    const low = Math.min(open, close) - Math.random() * 100;
+    klineData.push({ time: Date.now() - (60 - i) * 300000, open, high, low, close, volume: Math.random() * 1000 });
+    price = close;
+  }
+  currentPrice = price;
+  updatePriceDisplay();
+  calcSigma();
+  drawChart();
+}
+
+// Calculate σ (standard deviation of returns, annualized to feel right)
+function calcSigma() {
+  if (klineData.length < 10) return;
+  const returns = [];
+  for (let i = 1; i < klineData.length; i++) {
+    returns.push((klineData[i].close - klineData[i-1].close) / klineData[i-1].close);
+  }
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+  // Normalize: typical 5m stddev ~0.001-0.003, scale so σ=1 at ~0.002
+  currentSigma = stdDev / 0.002;
+
+  // Update σ display
+  const sigmaEl = document.getElementById('sigma-val');
+  sigmaEl.textContent = currentSigma.toFixed(2);
+
+  const fillEl = document.getElementById('sigma-fill');
+  const pct = Math.min(currentSigma / 3.5 * 100, 100);
+  fillEl.style.width = pct + '%';
+
+  if (currentSigma < 0.5) { sigmaEl.style.color = '#888'; fillEl.style.background = '#444'; }
+  else if (currentSigma < 1.0) { sigmaEl.style.color = '#4488ff'; fillEl.style.background = '#4488ff'; }
+  else if (currentSigma < 1.5) { sigmaEl.style.color = '#22cc88'; fillEl.style.background = '#22cc88'; }
+  else if (currentSigma < 2.0) { sigmaEl.style.color = '#ffd700'; fillEl.style.background = '#ffd700'; }
+  else if (currentSigma < 2.5) { sigmaEl.style.color = '#ff8800'; fillEl.style.background = '#ff8800'; }
+  else { sigmaEl.style.color = '#ff2244'; fillEl.style.background = '#ff2244'; }
+
+  // Auto state transition based on σ
+  autoTransitionState();
+}
+
+function autoTransitionState() {
+  const s = currentSigma;
+  let newState;
+  if (s < 0.5) newState = 'idle';
+  else if (s < 1.0) newState = 'omen';
+  else if (s < 1.5) newState = 'rising';
+  else if (s < 2.0) newState = 'clash';
+  else if (s < 2.5) newState = 'hot';
+  else if (s < 3.0) newState = 'awaken';
+  else newState = 'critical';
+  if (newState !== currentState) setState(newState);
+}
+
+function updatePriceDisplay() {
+  if (!currentPrice) return;
+  const priceStr = '$' + currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('price').textContent = priceStr;
+
+  if (klineData.length > 1) {
+    const firstClose = klineData[0].close;
+    const changePct = ((currentPrice - firstClose) / firstClose * 100);
+    const changeEl = document.getElementById('change');
+    changeEl.textContent = (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%';
+    changeEl.style.color = changePct >= 0 ? '#22cc88' : '#ff2244';
+  }
+}
+
+// Draw candlestick chart on Canvas
+function drawChart() {
+  const canvas = document.getElementById('chart-canvas');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  if (klineData.length === 0) return;
+
+  const w = rect.width;
+  const h = rect.height;
+  const pad = CHART_PADDING;
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
+
+  // Price range
+  let minPrice = Infinity, maxPrice = -Infinity;
+  klineData.forEach(k => {
+    if (k.low < minPrice) minPrice = k.low;
+    if (k.high > maxPrice) maxPrice = k.high;
+  });
+  const priceRange = maxPrice - minPrice || 1;
+  const pricePad = priceRange * 0.05;
+  minPrice -= pricePad;
+  maxPrice += pricePad;
+  const totalRange = maxPrice - minPrice;
+
+  const toY = (price) => pad.top + (1 - (price - minPrice) / totalRange) * chartH;
+  const candleW = Math.max(2, (chartW / klineData.length) * 0.7);
+  const gap = chartW / klineData.length;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  const gridSteps = 5;
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = pad.top + (chartH / gridSteps) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+
+    // Price labels
+    const price = maxPrice - (totalRange / gridSteps) * i;
+    ctx.fillStyle = '#555';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(price.toFixed(0), w - 5, y + 3);
+  }
+
+  // Draw candles
+  klineData.forEach((k, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    const isUp = k.close >= k.open;
+    const color = isUp ? CANDLE_COLORS.up : CANDLE_COLORS.down;
+
+    // Wick
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, toY(k.high));
+    ctx.lineTo(x, toY(k.low));
+    ctx.stroke();
+
+    // Body
+    const bodyTop = toY(Math.max(k.open, k.close));
+    const bodyBot = toY(Math.min(k.open, k.close));
+    const bodyH = Math.max(1, bodyBot - bodyTop);
+    ctx.fillStyle = color;
+    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+  });
+
+  // Current price line
+  const curY = toY(currentPrice);
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(pad.left, curY);
+  ctx.lineTo(w - pad.right, curY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Current price label
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(w - pad.right + 2, curY - 9, pad.right - 4, 18);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 10px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(currentPrice.toFixed(0), w - pad.right / 2 + 1, curY + 4);
+}
+
+// WebSocket for real-time price
+function connectWebSocket() {
+  try {
+    const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      currentPrice = parseFloat(data.p);
+      updatePriceDisplay();
+
+      // Update last candle's close
+      if (klineData.length > 0) {
+        const last = klineData[klineData.length - 1];
+        last.close = currentPrice;
+        if (currentPrice > last.high) last.high = currentPrice;
+        if (currentPrice < last.low) last.low = currentPrice;
+        drawChart();
+      }
+    };
+    ws.onclose = () => setTimeout(connectWebSocket, 3000);
+    ws.onerror = () => ws.close();
+  } catch (e) {
+    console.warn('WebSocket failed:', e);
+  }
+}
+
+// Init data
+fetchKlines();
+connectWebSocket();
+// Refresh klines every 60s
+setInterval(fetchKlines, 60000);
+// Redraw on resize
+window.addEventListener('resize', drawChart);
 
 // ==============================
 // State Configurations
@@ -723,7 +958,7 @@ const states = {
     comp: 65, compColor: '#22cc88',
     rsi: [85,'#22cc88','28↓'], macd: [70,'#22cc88','+12'], vol: [60,'#22cc88','高↑'],
     showInd: true, price: '$97,650.00', change: ['+0.6%','#22cc88'],
-    lines: 'ghost', pnl: '', distance: 'あと $160', distColor: var => '#22cc88', distTop: '25%',
+    lines: 'ghost', pnl: '', distance: 'あと $160', distColor: '#22cc88', distTop: '25%',
     tpProg: 0, showTpProg: false,
     glow: '', badge: '', stateLabel: '胎 動', stateLabelColor: '#22cc88',
     headerBg: '', shake: false, overlay: null,
